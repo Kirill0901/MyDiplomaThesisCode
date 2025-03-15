@@ -1,2 +1,2 @@
-Since I can't attach the entire repository, I'm only attaching what I did.
-Look presentation.pdf for more.
+Since I can't attach the entire project, I'm only attaching what I did.
+Look [presentation](https://github.com/Kirill0901/MyDiplomaThesisCode/blob/main/Presentation.pdf) for more.
