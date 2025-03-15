@@ -1,0 +1,285 @@
+﻿main программа;
+
+include "include/expression-sv";
+
+программа
+    = список_модулей    { ast.addNode(ast.sbl.host, ast.sbl.op.CheckState, 0); }
+    ;
+
+список_модулей
+    = модуль
+    = список_модулей модуль
+    ;
+
+    
+/* Модуль
+******************************************************************************************************/    
+модуль
+    = начало_модуля тело_модуля "endmodule"
+    ;
+
+начало_модуля
+    = "module" ID "(" список_сигналов ")" ";"
+    = "module" ID ";"
+    ;
+
+список_сигналов
+    = сигнал
+    = список_сигналов "," сигнал
+    ;
+
+/* Сигнал
+******************************************************************************************************/
+сигнал
+    = направление_сигнала тип_сигнала ID
+                                { 
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.Declaration, 2);
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.Announcements_Completed, 0);
+                                }
+//    = направление_сигнала тип_сигнала размерности_упаковки ID
+    ;
+
+направление_сигнала
+    = "input"
+    = "output"
+    ;
+
+тип_сигнала
+    = "logic"                   { 
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.PushVariable, "array");
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.ObjectElement, "int1");
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.FunctionCall, 0);
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.Announcement, 0);
+                                }
+    = "logic" начало_упаковки NUMBER ":" NUMBER "]"
+                                { 
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.PushConstant, 2);
+                                    ast.goParent(); 
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.Announcement, 0);
+                                }
+    ;
+    
+начало_упаковки
+    = "["                       { 
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.PushVariable, "array");
+                                    ast.addNode(ast.sbl.host, ast.sbl.op.ObjectElement, "logic");
+                                    ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.FunctionCall, 0);
+                                }
+    ;
+
+//размерности_упаковки
+//    = размер_шины
+//    = размерности_упаковки размер_шины
+//    ;
+
+//размер_шины
+//    = "[" выражение ":" выражение "]"
+//    ;
+
+/* Тело модуля
+******************************************************************************************************/
+тело_модуля
+    = список_блоков
+    ;
+
+список_блоков
+    = блок
+    = список_блоков блок
+    ;
+
+блок
+    = блок_непрерывных_присваиваний
+    = блок_переменных
+    = блок_комбинационный
+    = блок_триггерный
+    ;
+
+/* Блок непрерывных присваиваний
+******************************************************************************************************/
+блок_непрерывных_присваиваний
+    = "assign" список_непрерывных_присваиваний ";"
+    ;
+
+список_непрерывных_присваиваний
+    = оператор_блокирующего_присваивания
+    = список_непрерывных_присваиваний "," оператор_блокирующего_присваивания
+    ;
+
+/* Блок переменных
+******************************************************************************************************/
+блок_переменных
+    = список_определений_переменных ";"
+    ;
+
+список_определений_переменных
+    = тип_переменной объявление_или_определение_переменной
+    = список_определений_переменных "," объявление_или_определение_переменной
+    ;
+
+тип_переменной
+    = тип_сигнала
+//    = тип_сигнала размерности_упаковки
+    ;
+
+объявление_или_определение_переменной
+    = объявление_переменной
+                                { ast.addNode(ast.sbl.host, ast.sbl.op.Announcements_Completed, 0); } 
+    = объявление_переменной инициализация_переменной
+                                { ast.addNode(ast.sbl.host, ast.sbl.op.Announcements_Completed, 0); } 
+    ;
+
+объявление_переменной
+    = ID                        { ast.addNode(ast.sbl.host, ast.sbl.op.Declaration, 0); }
+    ;
+    
+инициализация_переменной
+    = знак_инициализации выражение
+                                { ast.goParent(); ast.addNode(ast.sbl.host, ast.sbl.op.PostInitialize, 0); }
+    ;
+
+знак_инициализации
+    = "="                       { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.Initialize, 0); }
+    ;
+
+
+/* Комбинационный блок
+******************************************************************************************************/
+блок_комбинационный
+    = начало_комбинационного_блока тело_блока
+                        { 
+                            ast.goParent(); 
+                            ast.goParent(); 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.FunctionDefinitionEnd, 0);
+                            ast.goParent(); 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.PostInitialize, 0);
+                            ast.addNode(ast.sbl.host, ast.sbl.op.Announcements_Completed, 0);
+                            ast.addNode(ast.sbl.host, ast.sbl.op.FunctionTethered, 0);
+                        }
+    ;
+    
+тело_блока 
+    = оператор
+                        { ast.addNode(ast.sbl.host, ast.sbl.op.None, 0); }
+    = "begin" список_операторов "end"
+                        { ast.addNode(ast.sbl.host, ast.sbl.op.None, 2); }
+    ;
+    
+начало_комбинационного_блока
+    = "always_comb"     { 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.AutoDeclaration, 0);
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.Initialize, 0);
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.FunctionDefinition, 0);
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.Function_Body, 0);
+                        }
+    ;
+
+список_операторов
+    = оператор
+    = список_операторов оператор
+    ;
+
+оператор
+    = условный_оператор
+    = оператор_неблокирующего_присваивания ";"
+    = оператор_блокирующего_присваивания ";"
+    ;
+
+/* Триггерный блок
+******************************************************************************************************/
+блок_триггерный
+    = начало_триггерного_блока блок_чувствительности тело_блока
+                        { 
+                            ast.goParent(); 
+                            ast.goParent(); 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.FunctionDefinitionEnd, 0);
+                            ast.goParent(); 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.PostInitialize, 0);
+                            ast.addNode(ast.sbl.host, ast.sbl.op.Announcements_Completed, 0);
+                            ast.addNode(ast.sbl.host, ast.sbl.op.FunctionTethered, 0);
+                        }
+//    = начало_триггерного_блока "@" "(" список_чувствительности ")" "begin" список_операторов_триггерных "end"
+    ;
+    
+начало_триггерного_блока
+    = "always_ff"       { 
+                            ast.addNode(ast.sbl.host, ast.sbl.op.AutoDeclaration, 0);
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.Initialize, 0);
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.FunctionDefinition, 0);
+                        }
+    ;
+    
+блок_чувствительности
+    = начало_блока_чувствительности список_чувствительности ")"
+                        { 
+                            //ast.goParent(); 
+                            ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.Function_Body, 0);
+                        }
+    ;
+    
+начало_блока_чувствительности
+    = "@" "("           //{ ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.Function_Params, 0); }
+    ;
+
+список_чувствительности
+    = сигнал_чувствительности
+    = список_чувствительности "," сигнал_чувствительности
+    ;
+
+сигнал_чувствительности
+    = "posedge" ID
+    = "negedge" ID
+    ;
+
+/*  Условный оператор
+******************************************************************************/
+условный_оператор
+    = базовый_условный_оператор >
+                            { ast.goParent(); ast.goParent(); }
+    = базовый_условный_оператор условие_else_триггерное
+                            { ast.goParent(); ast.goParent(); }
+    ;
+
+    базовый_условный_оператор
+        = условие_if "begin" список_операторов "end"
+        = условие_if оператор
+        ;
+
+    условие_if
+        = "if" "(" выражение ")"   {
+                                ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.If, 0);
+                                ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.If_True_Body, 0);
+                            }
+        ;
+    условие_else_триггерное
+        = слово_else "begin" список_операторов "end"
+        = слово_else оператор
+        ;
+        слово_else
+            = "else"        { 
+                                ast.goParent(); 
+                                ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.If_Else_Body, 0); 
+                            }
+            ;
+
+/*  Оператор присваивания
+******************************************************************************************************/
+оператор_блокирующего_присваивания
+    = адрес "=" выражение
+                            { ast.addNode(ast.sv.host, ast.sv.op.Assign, 0); }
+    = адрес знак_присваивания_с_итерацией выражение
+                            { ast.goParent(); }
+    ;
+знак_присваивания_с_итерацией
+    = "+="                  { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.AssignmentAddition, 0); }
+    = "-="                  { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.AssignmentSubtraction, 0); }
+    = "*="                  { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.AssignmentMultiplication, 0); }
+    = "/="                  { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.AssignmentDivision, 0); }
+    = "%="                  { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.AssignmentModulo, 0); }
+    ;
+
+/*  Оператор неблокирующего присваивания
+******************************************************************************************************/
+оператор_неблокирующего_присваивания
+    = адрес "<=" выражение
+                            { ast.addNode(ast.sv.host, ast.sv.op.Assign, 0); }
+    ;

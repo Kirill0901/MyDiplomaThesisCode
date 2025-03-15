@@ -1,0 +1,144 @@
+﻿/*  Описание грамматики выражений
+
+    SIMODO Base Language.
+
+    MIT License
+
+    Copyright (c) 2021 МГТУ им. Н.Э. Баумана, кафедра ИУ-6, Михаил Фетисов,
+
+    https://bmstu.codes/lsx/simodo/stars
+*/
+
+// Описание грамматики выражений
+
+lex {
+    lex.addMarkup("/*", "*/", "", lex.LexemeType.Comment);
+    lex.addMarkup("//", "", "", lex.LexemeType.Comment);
+    lex.addMarkup("\"", "\"", "\\", lex.LexemeType.Annotation);
+
+    lex.clearMasks();
+    lex.addMask("'bN", lex.LexemeType.Number, 2); 
+    lex.addMask("'oN", lex.LexemeType.Number, 8); 
+    lex.addMask("'hN", lex.LexemeType.Number, 16);
+    lex.addMask("@BUILDING_NUMBER_MASK", lex.LexemeType.Number, 10); 
+}
+
+выражение
+    = оператор_ИЛИ
+    = выражение тернарная_операция
+    ;
+тернарная_операция
+    = тернарная_операция_знак_1 выражение тернарная_операция_знак_2 выражение >
+                                    { ast.goParent(); ast.goParent(); }
+    ;
+    тернарная_операция_знак_1
+        = "?"                       {
+                                        ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.Ternary, 0);
+                                        ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.If_True_Body, 0);
+                                    }
+        ;
+    тернарная_операция_знак_2
+        = ":"                       { ast.goParent(); ast.addNode_StepInto(ast.sbl.host, ast.sbl1.op.If_Else_Body, 0); }
+        ;
+оператор_ИЛИ
+    = оператор_И
+    = оператор_ИЛИ "||" оператор_И
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Or, 1); }
+    ;
+оператор_И
+    = оператор_сравнения
+    = оператор_И "&&" оператор_сравнения
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.And, 1); }
+    ;
+оператор_сравнения
+    = арифметический_оператор
+    = оператор_сравнения "==" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.Equal, 1); }
+    = оператор_сравнения "!=" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.NotEqual, 1); }
+    = оператор_сравнения "<" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.Less, 1); }
+    = оператор_сравнения "<=" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.LessOrEqual, 1); }
+    = оператор_сравнения ">" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.More, 1); }
+    = оператор_сравнения ">=" арифметический_оператор
+                                    { ast.addNode(ast.sv.host, ast.sv.op.MoreOrEqual, 1); }
+    ;
+арифметический_оператор
+    = арифметический_оператор_мультипликатор
+    = арифметический_оператор "+" арифметический_оператор_мультипликатор
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Addition, 1); }
+    = арифметический_оператор "-" арифметический_оператор_мультипликатор
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Subtraction, 1); }
+    ;
+арифметический_оператор_мультипликатор
+    = возведение_в_степень
+    = арифметический_оператор_мультипликатор "*" возведение_в_степень
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Multiplication, 1); }
+    = арифметический_оператор_мультипликатор "/" возведение_в_степень
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Division, 1); }
+    = арифметический_оператор_мультипликатор "%" возведение_в_степень
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Modulo, 1); }
+    ;
+возведение_в_степень
+    = унарный_оператор
+    = возведение_в_степень "^" унарный_оператор
+                                    { ast.addNode(ast.sbl.host, ast.sbl.op.Power, 1); }
+    ;
+унарный_оператор
+    = величина
+    = "+" величина                  { ast.addNode(ast.sbl.host, ast.sbl.op.Plus, 0); }
+    = "-" величина                  { ast.addNode(ast.sbl.host, ast.sbl.op.Minus, 0); }
+    = "!" величина                  { ast.addNode(ast.sbl.host, ast.sbl.op.Not, 0); }
+    ;
+величина
+    = "(" выражение ")"
+    = базовая_константа >           { ast.goParent(); }
+    = "true"                        { ast.addNode(ast.sbl.host, ast.sbl.op.PushConstant, 0); }
+    = "false"                       { ast.addNode(ast.sbl.host, ast.sbl.op.PushConstant, 0); }
+//    = "undef"                       { ast.addNode(ast.sbl.host, ast.sbl.op.PushConstant, 0); }
+    = "null"                        { ast.addNode(ast.sbl.host, ast.sbl.op.PushConstant, 0); }
+    = адрес
+    ;
+    
+базовая_константа
+    = NUMBER                        { ast.addNode_StepInto(ast.sv.host, ast.sv.op.PushConst, 0); }
+    = ANNOTATION                    { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.PushConstant, 0); }
+    ;
+
+адрес
+    = переменная
+    = переменная операторы_адреса
+    ;
+    
+переменная
+    = ID                            { ast.addNode(ast.sbl.host, ast.sbl.op.PushVariable, 0); }
+    ;
+
+операторы_адреса
+    = оператор_адреса
+    = операторы_адреса оператор_адреса
+    ;
+
+оператор_адреса
+    = "." ID                        { ast.addNode(ast.sbl.host, ast.sbl.op.ObjectElement, 1); }
+    = знак_массива список_выражений "]"
+                                    { ast.goParent(); }
+    = знак_функции список_выражений ")"
+                                    { ast.goParent(); }
+    = знак_функции ")"
+                                    { ast.goParent(); }
+    ;
+    знак_массива
+        = "["                       { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.ArrayElement, 0); }
+        ;
+    знак_функции
+        = "("                       { ast.addNode_StepInto(ast.sbl.host, ast.sbl.op.FunctionCall, 0); }
+        ;
+    список_выражений
+        = элемент_списка_выражений
+        = список_выражений "," элемент_списка_выражений
+        ;
+        элемент_списка_выражений = выражение;
+    ;
